@@ -22,7 +22,7 @@ function varargout = MainFormNew(varargin)
 
 % Edit the above text to modify the response to help MainFormNew
 
-% Last Modified by GUIDE v2.5 12-Aug-2016 09:16:35
+% Last Modified by GUIDE v2.5 15-Aug-2016 13:47:29
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -58,7 +58,14 @@ handles.output = hObject;
 
 
 %Load the stored paths to the xml files to compare (from the last session)
-xmlPath = loadXmlSettings();
+try
+    xmlPath = loadXmlSettings();
+catch
+    warndlg('Could not load xml settings')
+    xmlPath = cell(2);
+    xmlPath{1} = '';
+    xmlPath{2} = '';
+end
 
 %Display the chosen xml files in gui
 handles.xml1pathBox.String = xmlPath{1};
@@ -67,14 +74,20 @@ handles.xml2pathBox.String = xmlPath{2};
 %Create preferences if they do not exist already to get the path to the xml
 %files. I just look for the last '\' in the path string and cut it and
 %everything after it off. Idk if this could lead to problems.
-path1 = xmlPath{1};
-index1 = strfind(xmlPath{1},'\');
-index1 = index1(end);
-relevantPart1 = path1(1:index1-1);
-path2 = xmlPath{2};
-index2 = strfind(xmlPath{2},'\');
-index2 = index2(end);
-relevantPart2 = path2(1:index2-1);
+try
+    path1 = xmlPath{1};
+    index1 = strfind(xmlPath{1},'\');
+    index1 = index1(end);
+    relevantPart1 = path1(1:index1-1);
+    path2 = xmlPath{2};
+    index2 = strfind(xmlPath{2},'\');
+    index2 = index2(end);
+    relevantPart2 = path2(1:index2-1);
+catch
+    warndlg('It seems like one xml path is inaccurate.')
+    relevantPart1 = '';
+    relevantPart2 = '';
+end
 
 %If the preferences for storage of xml1 path name and xml2 path name do not
 %exist create them (The preferences do not expire after the specific matlab
@@ -184,7 +197,7 @@ end
 [FileName, PathName] = uigetfile({'*.xml;*.ctr','XML File (*.xml,*.ctr)';'*.*','All files (*.*)'},'Choose a file',currentPath);
 
 %Update the preferences with the new xml path
-setpref('XmlPath','Xml1',PathName);
+setpref('XmlPath','Xml1',PathName(1:end-1));
 
 %Show chosen file in GUI
 if PathName
@@ -281,7 +294,7 @@ end
 [FileName, PathName] = uigetfile({'*.xml;*.ctr','XML File (*.xml,*.ctr)';'*.*','All files (*.*)'},'Choose a file',currentPath);
 
 %Update the preferences
-setpref('XmlPath','Xml1',PathName);
+setpref('XmlPath','Xml2',PathName(1:end-1));
 
 %Show chosen file in GUI
 if PathName
@@ -536,6 +549,9 @@ try
     channels2 = load(channelPath2);
 catch
     warndlg('Could not load the channel data from .mat file')
+    %Assign dummy value so the program does not crash
+    channels1 = struct();
+    channels2 = struct();
 end
 
 %Get the channel names in seperate variables
@@ -598,8 +614,12 @@ channelPath1Reduced = [tempPath '\channels1reduced.mat'];
 channelPath2Reduced = [tempPath '\channels2reduced.mat'];
 
 %Save the data
-save(channelPath1Reduced,'-struct','channels1')
-save(channelPath2Reduced,'-struct','channels2')
+try
+    save(channelPath1Reduced,'-struct','channels1')
+    save(channelPath2Reduced,'-struct','channels2')
+catch
+    warndlg('Could not save reduced data.')
+end
 
 %Generates a .mat file that contains the channel settings 
 function generateConfig()
@@ -620,6 +640,8 @@ try
     channels = load(channelPath);
 catch
     warndlg('Could not load the channel data from .mat file')
+    %dummy value so the program does not fail
+    channels = struct();
 end
 
 %I only need the fieldnames here, not the data
@@ -689,15 +711,23 @@ try
     vars2 = load(varPath2);
 catch
     warndlg('Was not able to load the variable data from the .mat file')
+    vars1 = struct();
+    vars2 = struct();
 end
 
 %Assume that the cycle lengths are the same
 cycleTimeDiff = 0;
 
 %Get the cycle durations.
-cycleduration1 = vars1.('Cycleduration');
-cycleduration2 = vars2.('Cycleduration');
-
+try
+    cycleduration1 = vars1.('Cycleduration');
+    cycleduration2 = vars2.('Cycleduration');
+catch
+    warndlg('Was not able to get cycleduration from variables.')
+    cycleduration1 = 0;
+    cycleduration2 = 0;
+end
+    
 %If the durations differ assign true to the the variable representing if
 %the cycle times difference
 if abs(cycleduration1-cycleduration2)
@@ -906,6 +936,8 @@ try
     vars2 = load(var2Path);
 catch
     warndlg('Could not load files, containing the variables')
+    vars1 = struct();
+    vars2 = struct();
 end
 
 %var1 and var 2 are structs. Get the fieldnames in the structs.
@@ -1029,3 +1061,18 @@ handles = initializeChannels(handles);
 handles = getDivergentChannels(handles);
 % Update handles structure
 guidata(hObject, handles);
+
+
+% --- Executes during object deletion, before destroying properties.
+function XmlCompare_DeleteFcn(hObject, eventdata, handles)
+% hObject    handle to XmlCompare (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+clear;
+if isdeployed
+    tempPath = [ctfroot '\temp'];
+else
+    tempPath = [pwd '\temp'];
+end 
+
+cmd_rmdir(tempPath);
